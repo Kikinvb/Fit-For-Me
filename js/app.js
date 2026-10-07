@@ -1,7 +1,9 @@
 (function () {
   const data = window.FIT_DATA;
-  const checkKey = "fit-for-me-checks-v2";
+  const checkKey = "fit-for-me-checks-v3";
   const patternKey = "fit-for-me-pattern-v2";
+  const weekdayIds = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const calWeekLabels = ["一", "二", "三", "四", "五", "六", "日"];
 
   const els = {
     week: document.getElementById("week"),
@@ -17,9 +19,34 @@
   let currentTab = "today";
   let patternId = localStorage.getItem(patternKey) || "aba";
   let checks = loadChecks();
+  let statsCursor = startOfMonth(new Date());
 
   function pickTodayId() {
-    return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][new Date().getDay()];
+    return weekdayIds[new Date().getDay()];
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function formatDate(d) {
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  }
+
+  function startOfMonth(d) {
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+
+  function todayStr() {
+    return formatDate(new Date());
+  }
+
+  /** Map week-strip weekday to a real calendar date in the week containing today. */
+  function dateForWeekday(dayId) {
+    const target = weekdayIds.indexOf(dayId);
+    const now = new Date();
+    const diff = target - now.getDay();
+    return formatDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff));
   }
 
   function loadChecks() {
@@ -32,6 +59,32 @@
 
   function saveChecks() {
     localStorage.setItem(checkKey, JSON.stringify(checks));
+  }
+
+  function isChecked(dateStr, kind, index) {
+    const day = checks[dateStr];
+    return !!(day && day[`${kind}-${index}`]);
+  }
+
+  function setChecked(dateStr, kind, index, value) {
+    if (!checks[dateStr]) checks[dateStr] = {};
+    const key = `${kind}-${index}`;
+    if (value) checks[dateStr][key] = true;
+    else delete checks[dateStr][key];
+    if (checks[dateStr] && Object.keys(checks[dateStr]).length === 0) {
+      delete checks[dateStr];
+    }
+    saveChecks();
+  }
+
+  function countForDate(dateStr) {
+    const day = checks[dateStr];
+    if (!day) return 0;
+    return Object.values(day).filter(Boolean).length;
+  }
+
+  function totalCompleted() {
+    return Object.keys(checks).reduce((sum, dateStr) => sum + countForDate(dateStr), 0);
   }
 
   function dayKind(dayId) {
@@ -103,12 +156,12 @@
     });
   }
 
-  function exerciseHtml(ex, key) {
-    const checked = !!checks[key];
+  function exerciseHtml(ex, dateStr, kind, index) {
+    const checked = isChecked(dateStr, kind, index);
     return `
       <article class="exercise">
         <label class="exercise-head">
-          <input class="check" type="checkbox" data-key="${key}" ${checked ? "checked" : ""} />
+          <input class="check" type="checkbox" data-date="${dateStr}" data-kind="${kind}" data-index="${index}" ${checked ? "checked" : ""} />
           <span class="exercise-main">
             <span class="ex-title">${ex.name}</span>
             <span class="ex-stats">
@@ -133,6 +186,7 @@
   function renderWorkout(kind) {
     const w = data.workouts[kind];
     const dayName = data.dayNames[currentDay];
+    const dateStr = dateForWeekday(currentDay);
     let html = `
       <section class="panel">
         <div class="session-badge">Session ${kind}</div>
@@ -150,7 +204,7 @@
         <div class="section-label">正式训练 · 4 个动作</div>`;
 
     w.exercises.forEach((ex, i) => {
-      html += exerciseHtml(ex, `${patternId}-${currentDay}-${kind}-${i}`);
+      html += exerciseHtml(ex, dateStr, kind, i);
     });
 
     html += `</section>`;
@@ -174,8 +228,7 @@
   function bindChecks() {
     els.session.querySelectorAll(".check").forEach((box) => {
       box.addEventListener("change", () => {
-        checks[box.dataset.key] = box.checked;
-        saveChecks();
+        setChecked(box.dataset.date, box.dataset.kind, Number(box.dataset.index), box.checked);
       });
     });
   }
@@ -184,29 +237,6 @@
     const kind = dayKind(currentDay);
     if (kind === "A" || kind === "B") renderWorkout(kind);
     else renderRestOrCardio(kind);
-  }
-
-  function collectStats() {
-    const byExercise = {};
-    ["A", "B"].forEach((kind) => {
-      data.workouts[kind].exercises.forEach((ex) => {
-        if (byExercise[ex.name] == null) byExercise[ex.name] = 0;
-      });
-    });
-
-    ["aba", "bab"].forEach((pid) => {
-      Object.keys(data.dayNames).forEach((dayId) => {
-        const kind = data.patterns[pid].days[dayId];
-        if (kind !== "A" && kind !== "B") return;
-        data.workouts[kind].exercises.forEach((ex, i) => {
-          const key = `${pid}-${dayId}-${kind}-${i}`;
-          if (checks[key]) byExercise[ex.name] += 1;
-        });
-      });
-    });
-
-    const total = Object.values(byExercise).reduce((sum, n) => sum + n, 0);
-    return { total, byExercise };
   }
 
   function renderProgress() {
@@ -258,30 +288,104 @@
       </section>`;
   }
 
+  function buildCalendarCells(year, month) {
+    // month: 0-based. Grid starts on Monday.
+    const first = new Date(year, month, 1);
+    const firstWeekday = (first.getDay() + 6) % 7; // Mon=0 ... Sun=6
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevDays = new Date(year, month, 0).getDate();
+    const today = todayStr();
+    const cells = [];
+
+    for (let i = 0; i < 42; i++) {
+      let y = year;
+      let m = month;
+      let day;
+      let inMonth = true;
+
+      if (i < firstWeekday) {
+        inMonth = false;
+        m = month - 1;
+        day = prevDays - firstWeekday + i + 1;
+        if (m < 0) {
+          m = 11;
+          y = year - 1;
+        }
+      } else if (i >= firstWeekday + daysInMonth) {
+        inMonth = false;
+        m = month + 1;
+        day = i - firstWeekday - daysInMonth + 1;
+        if (m > 11) {
+          m = 0;
+          y = year + 1;
+        }
+      } else {
+        day = i - firstWeekday + 1;
+      }
+
+      const dateStr = `${y}-${pad2(m + 1)}-${pad2(day)}`;
+      const count = countForDate(dateStr);
+      cells.push({ day, dateStr, inMonth, count, isToday: dateStr === today });
+    }
+
+    // Trim trailing empty week if unused
+    const lastInMonth = firstWeekday + daysInMonth;
+    const weeks = Math.ceil(lastInMonth / 7);
+    return cells.slice(0, weeks * 7);
+  }
+
   function renderStats() {
-    const { total, byExercise } = collectStats();
-    const rows = Object.entries(byExercise)
-      .map(
-        ([name, count]) => `
-        <li>
-          <span>${name}</span>
-          <strong>${count}</strong>
-        </li>`
-      )
-      .join("");
+    const year = statsCursor.getFullYear();
+    const month = statsCursor.getMonth();
+    const cells = buildCalendarCells(year, month);
+    const total = totalCompleted();
 
     els.stats.innerHTML = `
       <section class="panel">
         <div class="session-badge">Stats</div>
-        <h2>动作完成</h2>
-        <p class="sub">在训练日勾选动作后，这里会累计次数。</p>
+        <h2>训练统计</h2>
+        <p class="sub">勾选动作后，按日期记入日历。</p>
         <div class="stats-hero">
           <span class="stats-number">${total}</span>
-          <span class="stats-label">累计完成次数</span>
+          <span class="stats-label">累计完成动作</span>
         </div>
-        <div class="section-label">各动作</div>
-        <ul class="stats-list">${rows}</ul>
+
+        <div class="cal-head">
+          <button type="button" class="cal-nav" data-cal="prev" aria-label="上一月">‹</button>
+          <div class="cal-title">${year} 年 ${month + 1} 月</div>
+          <button type="button" class="cal-nav" data-cal="next" aria-label="下一月">›</button>
+        </div>
+        <div class="cal-weekdays">
+          ${calWeekLabels.map((l) => `<span>${l}</span>`).join("")}
+        </div>
+        <div class="cal-grid">
+          ${cells
+            .map((c) => {
+              const cls = [
+                "cal-cell",
+                c.inMonth ? "in-month" : "out-month",
+                c.isToday ? "today" : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
+              const countCls = c.count > 0 ? "cal-count" : "cal-count is-zero";
+              return `
+              <div class="${cls}" title="${c.dateStr}">
+                <span class="cal-day">${c.day}</span>
+                <span class="${countCls}">${c.count > 0 ? c.count : "0"}</span>
+              </div>`;
+            })
+            .join("")}
+        </div>
       </section>`;
+
+    els.stats.querySelectorAll("[data-cal]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const delta = btn.dataset.cal === "prev" ? -1 : 1;
+        statsCursor = new Date(year, month + delta, 1);
+        renderStats();
+      });
+    });
   }
 
   function syncNav() {

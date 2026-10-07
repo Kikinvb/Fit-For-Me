@@ -570,7 +570,7 @@ a {
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  margin: 4px 0 8px;
+  margin: 4px 0 16px;
 }
 
 .stats-number {
@@ -588,35 +588,113 @@ a {
   color: var(--ink-soft);
 }
 
-.stats-list {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  overflow: hidden;
-  background: #fff;
-}
-
-.stats-list li {
+.cal-head {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  padding: 11px 12px;
-  border-top: 1px solid var(--line);
-  font-size: 0.9rem;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-.stats-list li:first-child {
-  border-top: none;
-}
-
-.stats-list strong {
+.cal-title {
   font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
+  color: var(--brand-deep);
+}
+
+.cal-nav {
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  color: var(--brand-deep);
+  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem;
   font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.cal-nav:active {
+  transform: scale(0.96);
+}
+
+.cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.cal-weekdays span {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  padding: 4px 0;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-cell {
+  aspect-ratio: 1;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  padding: 4px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.cal-cell.in-month {
+  background: #fff;
+  border-color: var(--line);
+}
+
+.cal-cell.today {
+  border-color: var(--brand);
+  background: rgba(20, 122, 98, 0.08);
+}
+
+.cal-cell .cal-day {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  line-height: 1;
+}
+
+.cal-cell.in-month .cal-day {
+  color: var(--ink);
+}
+
+.cal-cell .cal-count {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   color: var(--accent);
-  white-space: nowrap;
+  line-height: 1;
+  min-height: 1em;
+}
+
+.cal-cell .cal-count.is-zero {
+  color: transparent;
+}
+
+.cal-cell.out-month .cal-day,
+.cal-cell.out-month .cal-count {
+  opacity: 0.35;
 }
 
 /* —— Bottom nav —— */
